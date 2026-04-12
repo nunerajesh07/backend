@@ -31,7 +31,7 @@ interface Config {
 
 const corsFromEnv = process.env.CORS_ORIGIN?.trim();
 const corsOrigins =
-  corsFromEnv?.split(',').map((o) => o.trim()).filter(Boolean) ?? [];
+  corsFromEnv?.split(',').map((o: string) => o.trim()).filter(Boolean) ?? [];
 
 const config: Config = {
   port: parseInt(process.env.PORT || '5001', 10),
