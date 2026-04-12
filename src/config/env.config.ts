@@ -8,8 +8,11 @@ const cwd = path.resolve(process.cwd());
 if (process.env.NODE_ENV === 'test') {
   dotenv.config({ path: path.join(cwd, '.env.test'), override: true });
 } else if (process.env.NODE_ENV === 'production') {
-  // Render / other hosts inject secrets via process.env — never override them with a local file
-  dotenv.config({ path: path.join(cwd, '.env.production') });
+  // Render (and most PaaS) set RENDER=true — use only platform env vars, not a committed .env.production
+  // (a repo file often contains localhost and would make Mongoose connect to 127.0.0.1 on the host).
+  if (process.env.RENDER !== 'true') {
+    dotenv.config({ path: path.join(cwd, '.env.production') });
+  }
 } else {
   const dev = dotenv.config({ path: path.join(cwd, '.env'), override: true });
   if (dev.error || !process.env.MONGODB_URI?.trim()) {
@@ -41,6 +44,16 @@ const config: Config = {
   corsOrigins,
   nodeEnv
 };
+
+if (
+  nodeEnv === 'production' &&
+  config.mongoUri &&
+  /127\.0\.0\.1|localhost/i.test(config.mongoUri)
+) {
+  throw new Error(
+    'MONGODB_URI cannot use localhost in production. Set MONGODB_URI in Render (or your host) to a MongoDB Atlas URI (mongodb+srv://...).'
+  );
+}
 
 const requiredKeys: (keyof Config)[] = ['port', 'mongoUri', 'jwtSecret', 'jwtExpiresIn', 'corsOrigins'];
 
