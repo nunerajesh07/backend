@@ -1,31 +1,33 @@
-import mongoose, { Schema, Document } from 'mongoose';
+﻿import mongoose, { Schema, Document } from 'mongoose';
 import bcrypt from 'bcryptjs';
 import { UserRole } from '../types/auth.types';
 
-/**
- * User document shape (MongoDB):
- * - email: unique login id
- * - passwordHash: bcrypt hash (never store plaintext; assign plain password to this field on create
- *   so the pre-save hook can hash it — same pattern as seed scripts)
- * - role: ADMIN | MODERATOR
- * - campus: campus name for RBAC (moderators are scoped to this campus for articles)
- * - createdAt: set automatically
- */
 export interface IUserDocument extends Document {
+  name?: string;
   email: string;
   passwordHash: string;
   role: UserRole;
-  campus: string;
+  campus?: string | null;
   createdAt: Date;
   comparePassword(plain: string): Promise<boolean>;
 }
 
 const UserSchema: Schema = new Schema({
+  name: { type: String },
   email: { type: String, required: true, unique: true },
   passwordHash: { type: String, required: true },
   role: { type: String, enum: Object.values(UserRole), required: true },
-  campus: { type: String, required: true },
+  campus: { type: String, default: null },
   createdAt: { type: Date, default: Date.now }
+});
+
+UserSchema.pre<IUserDocument>('validate', function () {
+  if (this.role === UserRole.MODERATOR && !(this.campus ?? '').trim()) {
+    throw new Error('Campus is required for moderator accounts');
+  }
+  if (this.role !== UserRole.MODERATOR && (this.campus ?? '').trim() === '') {
+    this.campus = null;
+  }
 });
 
 UserSchema.pre<IUserDocument>('save', async function () {
@@ -39,3 +41,4 @@ UserSchema.methods.comparePassword = async function (plain: string): Promise<boo
 };
 
 export default mongoose.model<IUserDocument>('User', UserSchema);
+

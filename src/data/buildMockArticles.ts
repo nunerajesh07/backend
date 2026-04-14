@@ -1,4 +1,4 @@
-import mongoose from 'mongoose';
+﻿import mongoose from 'mongoose';
 import { ArticleStatus } from '../types/article.types';
 import { getCategoryImageUrl } from './categoryImages';
 import type { MockArticleDefinition } from './mockArticleDefinitions';
@@ -75,3 +75,4 @@ export function buildArticleSeedDocuments(
 
   return out;
 }
+

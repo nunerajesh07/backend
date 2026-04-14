@@ -1,4 +1,4 @@
-import mongoose, { Schema, Document } from 'mongoose';
+﻿import mongoose, { Schema, Document } from 'mongoose';
 import { ArticleStatus } from '../types/article.types';
 
 export interface IArticleDocument extends Document {
@@ -39,3 +39,4 @@ const ArticleSchema: Schema = new Schema(
 ArticleSchema.index({ campus: 1, status: 1, scheduledPublishAt: 1 });
 
 export default mongoose.model<IArticleDocument>('Article', ArticleSchema);
+

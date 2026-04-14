@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Idempotent seed: Pune campus moderator + optional sample articles.
  *
  * Run from server directory:
@@ -15,7 +15,7 @@ import { UserRole } from '../types/auth.types';
 import { ArticleStatus } from '../types/article.types';
 
 const PUNE_EMAIL = 'mod.pune@niat.com';
-/** Plain password — assigned to `passwordHash` so the User pre-save hook bcrypt-hashes it. */
+/** Plain password â€” assigned to `passwordHash` so the User pre-save hook bcrypt-hashes it. */
 const PUNE_PASSWORD_PLAIN = 'pune123';
 
 async function insertPuneSampleArticles(authorId: mongoose.Types.ObjectId): Promise<void> {
@@ -46,7 +46,7 @@ async function insertPuneSampleArticles(authorId: mongoose.Types.ObjectId): Prom
       lastEditedAt: now
     },
     {
-      title: 'Industry guest session — Cloud & DevOps',
+      title: 'Industry guest session â€” Cloud & DevOps',
       body: 'An interactive session with industry experts is scheduled next Friday. Registrations are open for final-year students via the placement portal.',
       category: 'Events',
       campus: 'Pune',
@@ -66,7 +66,7 @@ async function insertPuneSampleArticles(authorId: mongoose.Types.ObjectId): Prom
 async function ensurePuneSampleArticles(authorId: mongoose.Types.ObjectId): Promise<void> {
   const count = await Article.countDocuments({ campus: 'Pune' });
   if (count > 0) {
-    console.log(`Pune already has ${count} article(s) — skipping sample article insert.`);
+    console.log(`Pune already has ${count} article(s) â€” skipping sample article insert.`);
     return;
   }
   await insertPuneSampleArticles(authorId);
@@ -89,7 +89,7 @@ async function main(): Promise<void> {
   if (!existing) {
     console.log(`Created moderator: ${PUNE_EMAIL} (campus: Pune). Password is stored as bcrypt hash.`);
   } else {
-    console.log(`Moderator ${PUNE_EMAIL} already exists — skipping user insert.`);
+    console.log(`Moderator ${PUNE_EMAIL} already exists â€” skipping user insert.`);
   }
 
   const authorId = user._id as mongoose.Types.ObjectId;
@@ -103,3 +103,4 @@ void main().catch((err) => {
   console.error(err);
   process.exit(1);
 });
+

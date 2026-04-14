@@ -1,9 +1,10 @@
-/**
+﻿/**
  * All article business rules and database access live here.
  * Controllers stay thin: they validate HTTP input and call these methods.
  */
 import mongoose from 'mongoose';
 import Article from '../models/Article.model';
+import { normalizeCampusName } from '../utils/campusName';
 import type { IArticleDocument } from '../models/Article.model';
 import ArticleView from '../models/ArticleView.model';
 import ArticleEditLog from '../models/ArticleEditLog.model';
@@ -15,9 +16,16 @@ import {
   type IEditSnapshot
 } from '../types/article.types';
 import type { ICampusLeaderboardData } from '../types/leaderboard.types';
-import { HttpStatus } from '../types/auth.types';
+import { HttpStatus, UserRole } from '../types/auth.types';
 
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+
+/** Identity + role for RBAC-aware article operations (from JWT). */
+export interface ArticleActor {
+  userId: string;
+  role: UserRole;
+  campus: string;
+}
 
 export type PublishIntent = 'draft' | 'now' | 'schedule';
 
@@ -210,6 +218,79 @@ export class ArticleService {
     );
   }
 
+  /** All articles, every campus (admin). */
+  async listAllArticlesOrdered(): Promise<IArticle[]> {
+    const docs = await Article.find({})
+      .populate('lastEditedBy', 'email')
+      .sort({ updatedAt: -1, createdAt: -1 })
+      .lean();
+    const ids = docs.map((d) => d._id.toString());
+    const viewsMap = await this.getViewsLast7DaysForArticleIds(ids);
+    return docs.map((d) =>
+      this.mapLeanToIArticle(d as unknown as Record<string, unknown>, viewsMap.get(d._id.toString()) ?? 0)
+    );
+  }
+
+  /** Published articles only, all campuses (student read-only catalogue). */
+  async listPublishedArticlesAllCampuses(): Promise<IArticle[]> {
+    const docs = await Article.find({ status: ArticleStatus.PUBLISHED })
+      .populate('lastEditedBy', 'email')
+      .sort({ updatedAt: -1, createdAt: -1 })
+      .lean();
+    const ids = docs.map((d) => d._id.toString());
+    const viewsMap = await this.getViewsLast7DaysForArticleIds(ids);
+    return docs.map((d) =>
+      this.mapLeanToIArticle(d as unknown as Record<string, unknown>, viewsMap.get(d._id.toString()) ?? 0)
+    );
+  }
+
+  async listArticlesForActor(actor: ArticleActor): Promise<IArticle[]> {
+    if (actor.role === UserRole.ADMIN) {
+      return this.listAllArticlesOrdered();
+    }
+    if (actor.role === UserRole.STUDENT) {
+      return this.listPublishedArticlesAllCampuses();
+    }
+    return this.getArticlesByCampus(actor.campus);
+  }
+
+  async getArticleByIdAnyCampus(id: string): Promise<IArticle | null> {
+    const doc = await Article.findById(id).populate('lastEditedBy', 'email').lean();
+    if (!doc) return null;
+    const viewsMap = await this.getViewsLast7DaysForArticleIds([id]);
+    return this.mapLeanToIArticle(doc as unknown as Record<string, unknown>, viewsMap.get(id) ?? 0);
+  }
+
+  async getPublishedArticleAnyCampus(id: string): Promise<IArticle | null> {
+    const doc = await Article.findOne({ _id: id, status: ArticleStatus.PUBLISHED })
+      .populate('lastEditedBy', 'email')
+      .lean();
+    if (!doc) return null;
+    const viewsMap = await this.getViewsLast7DaysForArticleIds([id]);
+    return this.mapLeanToIArticle(doc as unknown as Record<string, unknown>, viewsMap.get(id) ?? 0);
+  }
+
+  async getArticleForActor(id: string, actor: ArticleActor): Promise<IArticle | null> {
+    if (actor.role === UserRole.ADMIN) {
+      return this.getArticleByIdAnyCampus(id);
+    }
+    if (actor.role === UserRole.STUDENT) {
+      return this.getPublishedArticleAnyCampus(id);
+    }
+    const raw = await Article.findById(id).populate('lastEditedBy', 'email').lean();
+    if (!raw) {
+      return null;
+    }
+    if ((raw.campus as string) !== actor.campus.trim()) {
+      throw {
+        statusCode: HttpStatus.FORBIDDEN,
+        message: 'Forbidden: cannot access articles from another campus'
+      };
+    }
+    const viewsMap = await this.getViewsLast7DaysForArticleIds([id]);
+    return this.mapLeanToIArticle(raw as unknown as Record<string, unknown>, viewsMap.get(id) ?? 0);
+  }
+
   async getArticleById(id: string, campus: string): Promise<IArticle | null> {
     const doc = await Article.findOne({ _id: id, campus }).populate('lastEditedBy', 'email').lean();
     if (!doc) return null;
@@ -356,6 +437,78 @@ export class ArticleService {
     });
   }
 
+  async getArticleEditHistoryForActor(articleId: string, actor: ArticleActor): Promise<IArticleEditLogEntry[]> {
+    const article = await Article.findById(articleId);
+    if (!article) {
+      throw { statusCode: HttpStatus.NOT_FOUND, message: 'Article not found' };
+    }
+    if (actor.role !== UserRole.ADMIN && article.campus !== actor.campus.trim()) {
+      throw {
+        statusCode: HttpStatus.FORBIDDEN,
+        message: 'Forbidden: cannot access articles from another campus'
+      };
+    }
+    return this.getArticleEditHistory(articleId, article.campus);
+  }
+
+  async createArticleForActor(
+    input: {
+      title: string;
+      body: string;
+      category: string;
+      imageUrl?: string;
+      publishIntent: PublishIntent;
+      scheduledPublishAt?: string | null;
+    },
+    actor: ArticleActor,
+    adminTargetCampus?: string
+  ): Promise<IArticle> {
+    let campus: string;
+    if (actor.role === UserRole.ADMIN) {
+      campus = (adminTargetCampus ?? actor.campus).trim();
+      if (!campus) {
+        throw { statusCode: HttpStatus.BAD_REQUEST, message: 'Campus is required when creating an article as admin' };
+      }
+    } else {
+      campus = actor.campus.trim();
+    }
+    return this.createArticle(input, campus, actor.userId);
+  }
+
+  async updateArticleForActor(
+    id: string,
+    actor: ArticleActor,
+    updates: Partial<{
+      title: string;
+      body: string;
+      category: string;
+      imageUrl: string;
+      publishIntent: PublishIntent;
+      scheduledPublishAt: string | null;
+    }>
+  ): Promise<IArticle> {
+    if (actor.role === UserRole.ADMIN) {
+      const article = await Article.findById(id);
+      if (!article) {
+        throw { statusCode: HttpStatus.NOT_FOUND, message: 'Article not found' };
+      }
+      return this.updateArticle(id, article.campus, actor.userId, updates);
+    }
+    return this.updateArticle(id, actor.campus.trim(), actor.userId, updates);
+  }
+
+  async deleteArticleForActor(id: string, actor: ArticleActor): Promise<void> {
+    if (actor.role === UserRole.ADMIN) {
+      const article = await Article.findById(id);
+      if (!article) {
+        throw { statusCode: HttpStatus.NOT_FOUND, message: 'Article not found' };
+      }
+      await this.deleteArticle(id, article.campus);
+      return;
+    }
+    await this.deleteArticle(id, actor.campus.trim());
+  }
+
   /**
    * Global leaderboard: all articles, grouped by campus (for cross-campus ranking).
    * Includes a per-day, per-campus timeline for the line chart.
@@ -418,6 +571,56 @@ export class ArticleService {
     return dt.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
   }
 
+  /** All articles for admin, optional campus filter. */
+  async listAllArticlesForAdmin(campus?: string): Promise<{ articles: IArticle[]; total: number }> {
+    const q = campus?.trim() ? { campus: campus.trim() } : {};
+    const docs = await Article.find(q)
+      .populate('lastEditedBy', 'email')
+      .sort({ updatedAt: -1, createdAt: -1 })
+      .lean();
+    const ids = docs.map((d) => d._id.toString());
+    const viewsMap = await this.getViewsLast7DaysForArticleIds(ids);
+    const articles = docs.map((d) =>
+      this.mapLeanToIArticle(d as unknown as Record<string, unknown>, viewsMap.get(d._id.toString()) ?? 0)
+    );
+    return { articles, total: articles.length };
+  }
+
+  async getArticleCountSummary(): Promise<{ total: number; byCampus: Record<string, number> }> {
+    const agg = await Article.aggregate<{ _id: string; count: number }>([
+      { $group: { _id: '$campus', count: { $sum: 1 } } }
+    ]);
+    const byCampus: Record<string, number> = {};
+    let total = 0;
+    for (const row of agg) {
+      const key = String(row._id ?? '').trim() || 'Unknown';
+      byCampus[key] = row.count;
+      total += row.count;
+    }
+    return { total, byCampus };
+  }
+
+  async createArticleAdmin(
+    input: { title: string; body: string; category: string; campus: string; status: ArticleStatus },
+    authorId: string
+  ): Promise<IArticle> {
+    const publishIntent: PublishIntent = input.status === ArticleStatus.DRAFT ? 'draft' : 'now';
+    const campus = normalizeCampusName(input.campus);
+    if (!campus) {
+      throw { statusCode: HttpStatus.BAD_REQUEST, message: 'Campus is required' };
+    }
+    return this.createArticle(
+      {
+        title: input.title,
+        body: input.body,
+        category: input.category,
+        publishIntent
+      },
+      campus,
+      authorId
+    );
+  }
+
   /** Promote SCHEDULED articles whose time has passed to PUBLISHED. */
   async publishDueScheduledArticles(): Promise<number> {
     const now = new Date();
@@ -449,3 +652,4 @@ export class ArticleService {
 }
 
 export default new ArticleService();
+

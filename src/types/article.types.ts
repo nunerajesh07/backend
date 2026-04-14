@@ -1,4 +1,4 @@
-export enum ArticleStatus {
+﻿export enum ArticleStatus {
   PUBLISHED = 'PUBLISHED',
   DRAFT = 'DRAFT',
   SCHEDULED = 'SCHEDULED'
@@ -61,3 +61,4 @@ export interface IArticleEditLogEntry {
   editedByEmail?: string;
   snapshot: IEditSnapshot;
 }
+

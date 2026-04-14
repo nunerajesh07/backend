@@ -1,4 +1,4 @@
-import { seedDatabase } from './services/seed.service';
+﻿import { seedDatabase } from './services/seed.service';
 
 void (async () => {
   try {
@@ -9,3 +9,4 @@ void (async () => {
     process.exit(1);
   }
 })();
+

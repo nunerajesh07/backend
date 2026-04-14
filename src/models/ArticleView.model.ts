@@ -1,4 +1,4 @@
-import mongoose, { Schema, type Document } from 'mongoose';
+﻿import mongoose, { Schema, type Document } from 'mongoose';
 
 export interface IArticleViewDocument extends Document {
   articleId: mongoose.Types.ObjectId;
@@ -16,3 +16,4 @@ const ArticleViewSchema = new Schema(
 ArticleViewSchema.index({ articleId: 1, createdAt: -1 });
 
 export default mongoose.model<IArticleViewDocument>('ArticleView', ArticleViewSchema);
+

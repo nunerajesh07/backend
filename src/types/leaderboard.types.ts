@@ -1,4 +1,4 @@
-export interface ICampusRankingRow {
+﻿export interface ICampusRankingRow {
   rank: number;
   campus: string;
   count: number;
@@ -13,3 +13,4 @@ export interface ICampusLeaderboardData {
   campusKeys: string[];
   totalArticles: number;
 }
+

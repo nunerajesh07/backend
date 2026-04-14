@@ -1,6 +1,14 @@
-export enum UserRole {
+﻿export enum UserRole {
   ADMIN = 'ADMIN',
-  MODERATOR = 'MODERATOR'
+  MODERATOR = 'MODERATOR',
+  STUDENT = 'STUDENT'
+}
+
+export enum Permission {
+  READ = 'READ',
+  WRITE = 'WRITE',
+  DELETE = 'DELETE',
+  MANAGE_MODERATORS = 'MANAGE_MODERATORS'
 }
 
 export enum HttpStatus {
@@ -11,21 +19,23 @@ export enum HttpStatus {
   UNAUTHORIZED = 401,
   FORBIDDEN = 403,
   NOT_FOUND = 404,
+  CONFLICT = 409,
   INTERNAL_SERVER_ERROR = 500
 }
 
 export interface IUser {
   _id: string;
+  name?: string;
   email: string;
   role: UserRole;
-  campus: string;
+  campus?: string | null;
   createdAt: Date;
 }
 
 export interface ITokenPayload {
   userId: string;
   role: UserRole;
-  campus: string;
+  campus?: string | null;
 }
 
 declare global {
@@ -35,3 +45,4 @@ declare global {
     }
   }
 }
+

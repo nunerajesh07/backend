@@ -1,10 +1,11 @@
-import { Request, Response } from 'express';
-import articleService, { type PublishIntent } from '../services/article.service';
-import { HttpStatus } from '../types/auth.types';
+﻿import { Request, Response } from 'express';
+import articleService, { type ArticleActor, type PublishIntent } from '../services/article.service';
+import { HttpStatus, UserRole } from '../types/auth.types';
+import { ArticleStatus } from '../types/article.types';
 
 /**
  * Article HTTP layer: each method reads `req`, calls `articleService`, sends JSON.
- * Campus scoping uses `req.user.campus` from the JWT — never trust campus from the request body.
+ * Campus scoping uses `req.user.campus` from the JWT â€” never trust campus from the request body.
  */
 
 function parsePublishIntent(raw: unknown): PublishIntent | undefined {
@@ -13,9 +14,13 @@ function parsePublishIntent(raw: unknown): PublishIntent | undefined {
   return undefined;
 }
 
-/** Campus always comes from the JWT — trim so it matches DB values (no accidental spaces). */
-function campusFromUser(req: Request): string {
-  return (req.user?.campus ?? '').trim();
+function actorFromRequest(req: Request): ArticleActor {
+  const u = req.user!;
+  return {
+    userId: u.userId,
+    role: u.role,
+    campus: u.campus ?? ''
+  };
 }
 
 /** Turn service errors (with optional statusCode) into a JSON response. */
@@ -30,9 +35,63 @@ function sendServiceError(res: Response, error: unknown): void {
 }
 
 export class ArticleController {
+  async getAllArticlesAdmin(req: Request, res: Response): Promise<void> {
+    try {
+      const campus = typeof req.query.campus === 'string' ? req.query.campus : undefined;
+      const { articles, total } = await articleService.listAllArticlesForAdmin(campus);
+      res.status(HttpStatus.OK).json({ success: true, data: { articles, total } });
+    } catch (error: unknown) {
+      sendServiceError(res, error);
+    }
+  }
+
+  async getArticleCountAdmin(_req: Request, res: Response): Promise<void> {
+    try {
+      const data = await articleService.getArticleCountSummary();
+      res.status(HttpStatus.OK).json({ success: true, data });
+    } catch (error: unknown) {
+      sendServiceError(res, error);
+    }
+  }
+
   async createArticle(req: Request, res: Response): Promise<void> {
     try {
       const b = req.body as Record<string, unknown>;
+      const actor = actorFromRequest(req);
+
+      if (actor.role === UserRole.ADMIN) {
+        const statusRaw = b.status;
+        const campusRaw = b.campus;
+        const titleA = typeof b.title === 'string' ? b.title : '';
+        const bodyA = typeof b.body === 'string' ? b.body : '';
+        const categoryA = typeof b.category === 'string' ? b.category : '';
+        if (
+          (statusRaw === ArticleStatus.PUBLISHED || statusRaw === ArticleStatus.DRAFT) &&
+          typeof campusRaw === 'string' &&
+          campusRaw.trim() !== '' &&
+          titleA.trim() &&
+          bodyA.trim() &&
+          categoryA.trim()
+        ) {
+          const article = await articleService.createArticleAdmin(
+            {
+              title: titleA,
+              body: bodyA,
+              category: categoryA,
+              campus: campusRaw,
+              status: statusRaw as ArticleStatus
+            },
+            actor.userId
+          );
+          res.status(HttpStatus.CREATED).json({
+            success: true,
+            message: 'Article created successfully',
+            article
+          });
+          return;
+        }
+      }
+
       const title = typeof b.title === 'string' ? b.title : '';
       const body = typeof b.body === 'string' ? b.body : '';
       const category = typeof b.category === 'string' ? b.category : '';
@@ -40,11 +99,7 @@ export class ArticleController {
       const publishIntent = parsePublishIntent(b.publishIntent) ?? 'now';
       const scheduledPublishAt =
         typeof b.scheduledPublishAt === 'string' || b.scheduledPublishAt === null ? b.scheduledPublishAt : undefined;
-
-      const campus = campusFromUser(req);
-      const authorId = req.user!.userId;
-
-      const createInput: Parameters<typeof articleService.createArticle>[0] = {
+      const createInput: Parameters<typeof articleService.createArticleForActor>[0] = {
         title,
         body,
         category,
@@ -57,7 +112,13 @@ export class ArticleController {
         createInput.imageUrl = imageUrlRaw;
       }
 
-      const article = await articleService.createArticle(createInput, campus, authorId);
+      let adminTargetCampus: string | undefined;
+      if (actor.role === UserRole.ADMIN) {
+        const rawCampus = b.campus;
+        adminTargetCampus = typeof rawCampus === 'string' ? rawCampus : undefined;
+      }
+
+      const article = await articleService.createArticleForActor(createInput, actor, adminTargetCampus);
       res.status(HttpStatus.CREATED).json({
         success: true,
         message: 'Article created successfully',
@@ -79,8 +140,7 @@ export class ArticleController {
 
   async getArticles(req: Request, res: Response): Promise<void> {
     try {
-      const campus = campusFromUser(req);
-      const articles = await articleService.getArticlesByCampus(campus);
+      const articles = await articleService.listArticlesForActor(actorFromRequest(req));
       res.status(HttpStatus.OK).json({ success: true, data: articles });
     } catch (error: unknown) {
       sendServiceError(res, error);
@@ -89,8 +149,7 @@ export class ArticleController {
 
   async getArticleEditHistory(req: Request, res: Response): Promise<void> {
     try {
-      const campus = campusFromUser(req);
-      const history = await articleService.getArticleEditHistory(req.params.id as string, campus);
+      const history = await articleService.getArticleEditHistoryForActor(req.params.id as string, actorFromRequest(req));
       res.status(HttpStatus.OK).json({ success: true, data: history });
     } catch (error: unknown) {
       sendServiceError(res, error);
@@ -99,8 +158,7 @@ export class ArticleController {
 
   async getArticle(req: Request, res: Response): Promise<void> {
     try {
-      const campus = campusFromUser(req);
-      const article = await articleService.getArticleById(req.params.id as string, campus);
+      const article = await articleService.getArticleForActor(req.params.id as string, actorFromRequest(req));
       if (!article) {
         res.status(HttpStatus.NOT_FOUND).json({ success: false, message: 'Article not found', statusCode: HttpStatus.NOT_FOUND });
         return;
@@ -113,8 +171,7 @@ export class ArticleController {
 
   async updateArticle(req: Request, res: Response): Promise<void> {
     try {
-      const campus = campusFromUser(req);
-      const editorId = req.user!.userId;
+      const actor = actorFromRequest(req);
       const b = req.body as Record<string, unknown>;
       const updates: Partial<{
         title: string;
@@ -133,7 +190,7 @@ export class ArticleController {
       if (typeof b.scheduledPublishAt === 'string') updates.scheduledPublishAt = b.scheduledPublishAt;
       if (b.scheduledPublishAt === null) updates.scheduledPublishAt = null;
 
-      const updatedArticle = await articleService.updateArticle(req.params.id as string, campus, editorId, updates);
+      const updatedArticle = await articleService.updateArticleForActor(req.params.id as string, actor, updates);
       res.status(HttpStatus.OK).json({ success: true, data: updatedArticle });
     } catch (error: unknown) {
       sendServiceError(res, error);
@@ -142,8 +199,7 @@ export class ArticleController {
 
   async deleteArticle(req: Request, res: Response): Promise<void> {
     try {
-      const campus = campusFromUser(req);
-      await articleService.deleteArticle(req.params.id as string, campus);
+      await articleService.deleteArticleForActor(req.params.id as string, actorFromRequest(req));
       res.status(HttpStatus.OK).json({ success: true, data: null });
     } catch (error: unknown) {
       sendServiceError(res, error);
@@ -162,3 +218,4 @@ export class ArticleController {
 }
 
 export default new ArticleController();
+

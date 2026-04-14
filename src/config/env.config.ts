@@ -1,4 +1,4 @@
-import dotenv from 'dotenv';
+﻿import dotenv from 'dotenv';
 import path from 'path';
 
 const cwd = path.resolve(process.cwd());
@@ -8,7 +8,7 @@ const cwd = path.resolve(process.cwd());
 if (process.env.NODE_ENV === 'test') {
   dotenv.config({ path: path.join(cwd, '.env.test'), override: true });
 } else if (process.env.NODE_ENV === 'production') {
-  // Render (and most PaaS) set RENDER=true — use only platform env vars, not a committed .env.production
+  // Render (and most PaaS) set RENDER=true â€” use only platform env vars, not a committed .env.production
   // (a repo file often contains localhost and would make Mongoose connect to 127.0.0.1 on the host).
   if (process.env.RENDER !== 'true') {
     dotenv.config({ path: path.join(cwd, '.env.production') });
@@ -67,3 +67,4 @@ for (const key of requiredKeys) {
 }
 
 export default config;
+

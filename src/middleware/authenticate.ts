@@ -1,4 +1,4 @@
-import { Request, Response, NextFunction } from 'express';
+﻿import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import config from '../config/env.config';
 import { HttpStatus, ITokenPayload } from '../types/auth.types';
@@ -31,3 +31,4 @@ export const authenticate = (req: Request, res: Response, next: NextFunction): v
     res.status(HttpStatus.UNAUTHORIZED).json({ success: false, message: 'Invalid or expired token', statusCode: HttpStatus.UNAUTHORIZED });
   }
 };
+

@@ -1,4 +1,4 @@
-import mongoose from 'mongoose';
+﻿import mongoose from 'mongoose';
 import config from '../config/env.config';
 import User, { type IUserDocument } from '../models/User.model';
 import Article from '../models/Article.model';
@@ -18,51 +18,62 @@ export const seedDatabase = async (): Promise<void> => {
   await ArticleEditLog.deleteMany({});
   console.log('Cleared existing users and articles.');
 
-  const mods = [
+  const seedUsers: Array<{
+    email: string;
+    passwordHash: string;
+    role: UserRole;
+    campus: string;
+  }> = [
     {
-      email: 'mod.chennai@niat.com',
-      passwordHash: 'password123',
-      role: UserRole.MODERATOR,
-      campus: 'Chennai',
+      email: 'admin@niat.ac.in',
+      passwordHash: 'Admin@123',
+      role: UserRole.ADMIN,
+      campus: 'All Campuses'
     },
     {
-      email: 'mod.hyderabad@niat.com',
-      passwordHash: 'password123',
+      email: 'mod.hyderabad@niat.ac.in',
+      passwordHash: 'Mod@123',
       role: UserRole.MODERATOR,
-      campus: 'Hyderabad',
+      campus: 'Hyderabad'
     },
     {
-      email: 'mod.pune@niat.com',
-      passwordHash: 'pune123',
+      email: 'mod.bangalore@niat.ac.in',
+      passwordHash: 'Mod@123',
       role: UserRole.MODERATOR,
-      campus: 'Pune',
+      campus: 'Bangalore'
     },
     {
-      email: 'mod.noida@niat.com',
-      passwordHash: 'noida123',
-      role: UserRole.MODERATOR,
-      campus: 'Noida',
-    },
+      email: 'student@niat.ac.in',
+      passwordHash: 'Student@123',
+      role: UserRole.STUDENT,
+      campus: 'General'
+    }
   ];
 
-  const createdMods: IUserDocument[] = [];
-  for (const mod of mods) {
-    const user = new User(mod);
+  const createdDocs: IUserDocument[] = [];
+  for (const u of seedUsers) {
+    const user = new User(u);
     await user.save();
-    createdMods.push(user);
+    createdDocs.push(user);
   }
-  console.log('Created moderator users.');
+  console.log('Created seed users (admin, moderators, student).');
 
   const campusToAuthor = new Map<string, mongoose.Types.ObjectId>();
-  for (const mod of createdMods) {
-    campusToAuthor.set(mod.campus, mod._id as mongoose.Types.ObjectId);
+  for (const doc of createdDocs) {
+    if (doc.role === UserRole.MODERATOR) {
+      if (doc.campus) {
+        campusToAuthor.set(doc.campus, doc._id as mongoose.Types.ObjectId);
+      }
+    }
   }
 
   const shuffled = shuffleArray(MOCK_ARTICLE_DEFINITIONS);
   const articlesToCreate = buildArticleSeedDocuments(shuffled, campusToAuthor, new Date());
 
   await Article.insertMany(articlesToCreate);
-  console.log(`Created ${articlesToCreate.length} mock articles (realistic content).`);
+  console.log(`Created ${articlesToCreate.length} mock articles (campuses with moderators only).`);
 
   console.log('Seeding completed successfully!');
 };
+
+

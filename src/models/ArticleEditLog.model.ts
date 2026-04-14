@@ -1,4 +1,4 @@
-import mongoose, { Schema, type Document } from 'mongoose';
+﻿import mongoose, { Schema, type Document } from 'mongoose';
 import { ArticleEditAction } from '../types/article.types';
 
 export interface IEditSnapshot {
@@ -34,3 +34,4 @@ const ArticleEditLogSchema = new Schema(
 ArticleEditLogSchema.index({ articleId: 1, editedAt: -1 });
 
 export default mongoose.model<IArticleEditLogDocument>('ArticleEditLog', ArticleEditLogSchema);
+

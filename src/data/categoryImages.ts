@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Stable image URLs for seeded articles (category hints only; not bundled assets).
  */
 const DEFAULT_IMAGE =
@@ -19,3 +19,4 @@ const BY_CATEGORY: Record<string, string> = {
 export function getCategoryImageUrl(category: string): string {
   return BY_CATEGORY[category] ?? DEFAULT_IMAGE;
 }
+

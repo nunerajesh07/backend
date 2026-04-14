@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Insert or refresh realistic mock articles without wiping users.
  * Removes existing rows whose titles match the mock set, then inserts fresh documents.
  *
@@ -27,7 +27,9 @@ async function main(): Promise<void> {
 
   const campusToAuthor = new Map<string, mongoose.Types.ObjectId>();
   for (const m of mods) {
+    if (m.campus) {
     campusToAuthor.set(m.campus, m._id as mongoose.Types.ObjectId);
+  }
   }
 
   const titles = MOCK_ARTICLE_DEFINITIONS.map((d: MockArticleDefinition) => d.title);
@@ -39,7 +41,7 @@ async function main(): Promise<void> {
 
   if (docs.length < MOCK_ARTICLE_DEFINITIONS.length) {
     console.warn(
-      `Warning: only ${docs.length}/${MOCK_ARTICLE_DEFINITIONS.length} articles built — add moderators for missing campuses.`
+      `Warning: only ${docs.length}/${MOCK_ARTICLE_DEFINITIONS.length} articles built â€” add moderators for missing campuses.`
     );
   }
 
@@ -59,3 +61,5 @@ void main().catch((e) => {
   console.error(e);
   process.exit(1);
 });
+
+
